@@ -1,0 +1,48 @@
+# Keil MDK 编译产物
+project/Keil/Objects/
+project/Keil/*.uvguix.*
+project/Keil/*.scvd
+*.crf
+*.d
+*.o
+*.htm
+*.lnp
+*.map
+*.lst
+*.m51
+*.obj
+*.hex
+*.bin
+*.axf
+*.elf
+*.out
+*.iex
+*.plg
+*.tra
+*.dep
+*.JLinkLog.txt
+*.dat
+
+# Keil 用户配置 (保留模板)
+project/Keil/*.uvguix.*
+
+# JLink
+*.jlink
+
+# TI SysConfig 备份
+*.syscfg.bak
+
+# 编辑器 & IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# 调试日志
+*.log
