@@ -1,122 +1,131 @@
-// motor_tb6612.c
-
-#include "motor_hardware.h" 
-#include "_74hc595.h"
+#include "motor_hardware.h"
 #include "log.h"
-#include <stdio.h> // 为了 log 输出
-#include <stdlib.h> // 为了 abs() 函数
 
-// 声明 TB6612 驱动内部函数 (static)
-static void tb6612_enable_all_motor_impl(const MotorSystemConfig* g_motor_system_config);
-static void tb6612_disable_all_motor_impl(const MotorSystemConfig* g_motor_system_config);
-static void tb6612_set_pwms_impl(const MotorSystemConfig* g_motor_system_config, int *pwms);
+static void drv8870_enable_all_motor_impl(const MotorSystemConfig *config);
+static void drv8870_disable_all_motor_impl(const MotorSystemConfig *config);
+static void drv8870_set_pwms_impl(const MotorSystemConfig *config,
+    const int *pwms);
 
-// 具体的 TB6612 驱动接口实现
+/* Keep the exported name for compatibility with the existing application. */
 motorHardWareInterface tb6612_interface = {
-    .disable_all_motor = tb6612_disable_all_motor_impl,
-    .enable_all_motor = tb6612_enable_all_motor_impl,
-    .set_pwms = tb6612_set_pwms_impl, // 原有的按编号设置函数
+    .disable_all_motor = drv8870_disable_all_motor_impl,
+    .enable_all_motor = drv8870_enable_all_motor_impl,
+    .set_pwms = drv8870_set_pwms_impl,
 };
 
+static int get_configured_motor_count(const MotorSystemConfig *config)
+{
+    int count = (int) config->motor_count;
 
-static void tb6612_enable_all_motor_impl(const MotorSystemConfig* g_motor_system_config) {
-    // 遍历配置结构体，只对启用的电机使能定时器
-    for (int i = 0; i < NUM_MOTORS; i++) {
-        if (g_motor_system_config->motors[i].enabled) {
-            GPTIMER_Regs* timer_instance = g_motor_system_config->motors[i].timer_instance;
-            if (timer_instance != NULL) {
-                DL_Timer_startCounter(timer_instance);
-            } else {
-                 log_w("Timer instance is NULL for motor %d enable!\n", i);
-            }
+    return count > NUM_MOTORS ? NUM_MOTORS : count;
+}
+
+static void motor_set_input_compare(const MotorConfig *motor,
+    bool second_input, uint32_t compare_value)
+{
+    GPTIMER_Regs *timer = second_input ? motor->second_timer_instance :
+        motor->timer_instance;
+    uint32_t channel = second_input ? motor->second_pwm_cc_index :
+        motor->pwm_cc_index;
+
+    if (timer != NULL) {
+        DL_Timer_setCaptureCompareValue(timer, compare_value, channel);
+    }
+}
+
+static void motor_coast(const MotorConfig *motor)
+{
+    motor_set_input_compare(motor, false, 0U);
+    motor_set_input_compare(motor, true, 0U);
+}
+
+static void drv8870_enable_all_motor_impl(const MotorSystemConfig *config)
+{
+    int motor_count = get_configured_motor_count(config);
+
+    for (int i = 0; i < motor_count; i++) {
+        const MotorConfig *motor = &config->motors[i];
+
+        if (!motor->enabled) {
+            continue;
+        }
+        if (motor->timer_instance != NULL) {
+            DL_Timer_startCounter(motor->timer_instance);
+        }
+        if (motor->second_timer_instance != NULL &&
+            motor->second_timer_instance != motor->timer_instance) {
+            DL_Timer_startCounter(motor->second_timer_instance);
         }
     }
 }
 
-static void tb6612_disable_all_motor_impl(const MotorSystemConfig* g_motor_system_config) {
-    // 遍历配置结构体，只对启用的电机使能定时器
-    for (int i = 0; i < NUM_MOTORS; i++) {
-        if (g_motor_system_config->motors[i].enabled) {
-            GPTIMER_Regs* timer_instance = g_motor_system_config->motors[i].timer_instance;
-						uint32_t channel = g_motor_system_config->motors[i].pwm_cc_index;
-            if (timer_instance != NULL) {
-								DL_Timer_setCaptureCompareValue(timer_instance, 0, channel);
-                DL_Timer_stopCounter(timer_instance);
-            } else {
-                 log_w("Timer instance is NULL for motor %d enable!\n", i);
-            }
+static void drv8870_disable_all_motor_impl(const MotorSystemConfig *config)
+{
+    int motor_count = get_configured_motor_count(config);
+
+    for (int i = 0; i < motor_count; i++) {
+        const MotorConfig *motor = &config->motors[i];
+
+        if (!motor->enabled) {
+            continue;
+        }
+        motor_coast(motor);
+        if (motor->timer_instance != NULL) {
+            DL_Timer_stopCounter(motor->timer_instance);
+        }
+        if (motor->second_timer_instance != NULL &&
+            motor->second_timer_instance != motor->timer_instance) {
+            DL_Timer_stopCounter(motor->second_timer_instance);
         }
     }
 }
 
-static void tb6612_set_pwms_impl(const MotorSystemConfig* g_motor_system_config, int *pwms) {
-    if (pwms == NULL || g_motor_system_config == NULL) {
-        log_e("Invalid parameters in tb6612_set_pwms_impl\n");
+static void drv8870_set_pwms_impl(const MotorSystemConfig *config,
+    const int *pwms)
+{
+    int limited_pwms[NUM_MOTORS] = {0};
+    int motor_count;
+
+    if (config == NULL || pwms == NULL) {
+        log_e("Invalid parameters in drv8870_set_pwms_impl\n");
         return;
     }
-    
-    uint16_t hc595_databyte = 0;  
-    
-    // 确保不会数组越界
-    int motor_count = ((int)g_motor_system_config->motor_count > NUM_MOTORS) ? 
-                      NUM_MOTORS : g_motor_system_config->motor_count;
-    
-    // 设置方向控制
+
+    motor_count = get_configured_motor_count(config);
     for (int i = 0; i < motor_count; i++) {
-        if (!g_motor_system_config->motors[i].enabled) {
-            // 禁用电机：IN1=0, IN2=0 (停止)
-            hc595_databyte &= ~(1 << (i * 2));       
-            hc595_databyte &= ~(1 << (i * 2 + 1));   
+        const MotorConfig *motor = &config->motors[i];
+        int pwm_limit = config->max_pwm_value;
+
+        if (!motor->enabled || motor->timer_instance == NULL ||
+            motor->second_timer_instance == NULL || pwm_limit <= 0) {
             continue;
         }
-        
-        bool polarity = g_motor_system_config->motors[i].polarity;
-        
-        if (pwms[i] > 0) {  
-            if (polarity) {
-                hc595_databyte |= (1 << (i * 2));       
-                hc595_databyte &= ~(1 << (i * 2 + 1));   
-            } else {
-                hc595_databyte &= ~(1 << (i * 2));       
-                hc595_databyte |= (1 << (i * 2 + 1));    
-            }
-        } else if (pwms[i] < 0) {  
-            if (polarity) {
-                hc595_databyte &= ~(1 << (i * 2));       
-                hc595_databyte |= (1 << (i * 2 + 1));    
-            } else {
-                hc595_databyte |= (1 << (i * 2));        
-                hc595_databyte &= ~(1 << (i * 2 + 1));   
-            }
-        } else {  // pwms[i] == 0
-            hc595_databyte &= ~(1 << (i * 2));       
-            hc595_databyte &= ~(1 << (i * 2 + 1));   
+        if ((uint32_t) pwm_limit > DL_Timer_getLoadValue(motor->timer_instance)) {
+            pwm_limit = (int) DL_Timer_getLoadValue(motor->timer_instance);
         }
+        limited_pwms[i] = amplitude_limit(pwms[i], pwm_limit);
     }
-    
-    // 输出方向控制信号
-    hc595_output_byte(hc595_databyte);
-    
-    // 设置PWM占空比
+
+    /* Coast before selecting the opposite input, so IN1/IN2 never overlap. */
     for (int i = 0; i < motor_count; i++) {
-        GPTIMER_Regs* timer_instance = g_motor_system_config->motors[i].timer_instance;
-        uint32_t pwm_cc_index = g_motor_system_config->motors[i].pwm_cc_index;
-        
-        if (timer_instance == NULL) {
-            log_e("Timer instance is NULL for motor %d\n", i);
+        motor_coast(&config->motors[i]);
+    }
+
+    for (int i = 0; i < motor_count; i++) {
+        const MotorConfig *motor = &config->motors[i];
+        int limited_pwm = limited_pwms[i];
+        bool reverse = limited_pwm < 0;
+        uint32_t pwm_value = reverse ? (uint32_t) (-limited_pwm) :
+            (uint32_t) limited_pwm;
+
+        if (!motor->enabled || pwm_value == 0U) {
             continue;
         }
-        
-        if (!g_motor_system_config->motors[i].enabled) {
-            DL_Timer_setCaptureCompareValue(timer_instance, 0, pwm_cc_index);
-        } else {
-            // 使用绝对值设置PWM，方向已经由74HC595控制
-            uint32_t pwm_value = (uint32_t)abs(pwms[i]);
-            // 可以添加PWM值限制检查
-            if (pwm_value > g_motor_system_config->max_pwm_value) {
-                pwm_value = g_motor_system_config->max_pwm_value;
-            }
-            DL_Timer_setCaptureCompareValue(timer_instance, pwm_value, pwm_cc_index);
+        if (motor->polarity) {
+            reverse = !reverse;
         }
+
+        /* IN1 PWM/IN2 low is forward; swap the active input for reverse. */
+        motor_set_input_compare(motor, reverse, pwm_value);
     }
 }

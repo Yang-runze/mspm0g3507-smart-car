@@ -64,6 +64,9 @@ void camera_process(void);
  */
 void camera_irq_handler(DL_UART_IIDX idx);
 
+uint32_t camera_get_rx_byte_count(void);
+uint8_t camera_get_last_rx_byte(void);
+
 // ====================  回调函数（用户实现）  ====================
 
 /**

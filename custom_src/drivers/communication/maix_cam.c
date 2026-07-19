@@ -11,8 +11,8 @@
 
 // ====================  配置定义  ====================
 
-#define CAMERA_UART             UART_1_INST    // 假设使用UART1与摄像头通信
-#define CAMERA_UART_IRQ         UART_1_INST_INT_IRQN
+#define CAMERA_UART             CAM_UART_INST
+#define CAMERA_UART_IRQ         CAM_UART_INST_INT_IRQN
 
 #define CAMERA_RX_BUFFER_SIZE   256            // 摄像头可能发送较多数据
 #define CAMERA_TX_BUFFER_SIZE   128
@@ -24,6 +24,8 @@ static uint8_t camera_rx_buffer[CAMERA_RX_BUFFER_SIZE];
 static uint8_t camera_tx_buffer[CAMERA_TX_BUFFER_SIZE];
 static lwrb_t camera_rx_rb, camera_tx_rb;
 static volatile bool camera_data_ready = false;
+static volatile uint32_t camera_rx_byte_count;
+static volatile uint8_t camera_last_rx_byte;
 
 // ====================  内部函数声明  ====================
 
@@ -50,6 +52,8 @@ camera_result_t camera_init(void) {
     NVIC_EnableIRQ(CAMERA_UART_IRQ);
     
     camera_data_ready = false;
+    camera_rx_byte_count = 0U;
+    camera_last_rx_byte = 0U;
     
     return CAMERA_OK;
 }
@@ -59,11 +63,24 @@ camera_result_t camera_init(void) {
 void camera_irq_handler(DL_UART_IIDX idx) {
     if (idx == DL_UART_IIDX_RX) {
         uint8_t received_byte = DL_UART_Main_receiveData(CAMERA_UART);
+
+        camera_last_rx_byte = received_byte;
+        camera_rx_byte_count++;
         
         if (lwrb_write(&camera_rx_rb, &received_byte, 1) == 1) {
             camera_data_ready = true;
         }
     }
+}
+
+uint32_t camera_get_rx_byte_count(void)
+{
+    return camera_rx_byte_count;
+}
+
+uint8_t camera_get_last_rx_byte(void)
+{
+    return camera_last_rx_byte;
 }
 
 // ====================  发送函数  ====================

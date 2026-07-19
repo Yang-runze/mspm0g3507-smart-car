@@ -1,5 +1,6 @@
 #include "gray_detection.h"
 #include "pca9555.h"
+#include "delay.h"
 
 uint16_t gray_byte = 0x00;
 #define SEPARATED_PATTERN_OUTPUT  3.0
@@ -16,17 +17,6 @@ static soft_iic_info_struct pca9555_i2c = {
     .sdaIOMUX = PORTA_SDA1_IOMUX,
     .delay_time = 10,
     .addr = 0x20,
-};
-#elif defined(USE_GW_GRAY)
-static soft_iic_info_struct gw_i2c = {
-    .sclPort = PORTA_PORT,
-    .sdaPort = PORTA_PORT,
-    .sclPin = PORTA_SCL1_PIN,
-    .sdaPin = PORTA_SDA1_PIN,
-    .sclIOMUX = PORTA_SCL1_IOMUX,
-    .sdaIOMUX = PORTA_SDA1_IOMUX,
-    .delay_time = 45,
-    .addr = GW_GRAY_ADDR_DEF,
 };
 #endif
 
@@ -46,8 +36,8 @@ static gpio_struct_t gray_gpio[TRACK_SENSOR_COUNT] = {
 void gray_detection_init(void) {
 #ifdef USE_PCA9555
     soft_iic_init(&pca9555_i2c);
-#elif defined(USE_GW_GRAY) 
-    soft_iic_init(&gw_i2c);
+#elif defined(USE_GW_AUX_BOARD)
+    DL_GPIO_clearPins(PORTB_PORT, PORTB_TRACK_CLK_PIN);
 #endif
 }
 
@@ -61,21 +51,30 @@ uint16_t gray_read_byte(void) {
     return data;    
 #elif defined(USE_PCA9555)
     return pca9555_read_bit12(&pca9555_i2c, PCA9555_ADDR);
-#elif defined(USE_GW_GRAY)
-    uint8_t digital_value;
-    
-    
-    // 使用新的I2C读取函数
-    digital_value = soft_iic_read_8bit_register(&gw_i2c, GW_GRAY_DIGITAL_MODE);
-    
+#elif defined(USE_GW_AUX_BOARD)
+    uint8_t digital_value = 0U;
 
-    
-    digital_value = ~digital_value;
-    digital_value = ((digital_value & 0x01) << 7) | ((digital_value & 0x02) << 5) |
-                    ((digital_value & 0x04) << 3) | ((digital_value & 0x08) << 1) |
-                    ((digital_value & 0x10) >> 1) | ((digital_value & 0x20) >> 3) |
-                    ((digital_value & 0x40) >> 5) | ((digital_value & 0x80) >> 7);
-    return (uint16_t)digital_value;
+    for (uint8_t bit_index = 0U; bit_index < TRACK_SENSOR_COUNT; bit_index++) {
+        uint8_t bit_value;
+
+        DL_GPIO_setPins(PORTB_PORT, PORTB_TRACK_CLK_PIN);
+        delay_us(GW_AUX_CLOCK_DELAY_US);
+        bit_value = (DL_GPIO_readPins(PORTB_PORT, PORTB_TRACK_DAT_PIN) != 0U);
+        DL_GPIO_clearPins(PORTB_PORT, PORTB_TRACK_CLK_PIN);
+        delay_us(GW_AUX_CLOCK_DELAY_US);
+
+#if GW_AUX_DATA_ACTIVE_LOW
+        bit_value = !bit_value;
+#endif
+
+#if GW_AUX_DATA_MSB_FIRST
+        digital_value = (uint8_t) ((digital_value << 1U) | bit_value);
+#else
+        digital_value |= (uint8_t) (bit_value << bit_index);
+#endif
+    }
+
+    return digital_value;
 #elif defined(USE_CAM)
 		#include "task21f_config.h"
     extern maixCam_t maix_cam;

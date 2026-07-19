@@ -25,20 +25,19 @@ typedef enum {
 // 电机配置结构体
 // 包含每个电机所需的硬件信息
 typedef struct {
-    bool enabled;           // 该电机是否启用 (用于两轮/四轮适配)
-    GPTIMER_Regs* timer_instance;   // 定时器实例地址 (明确为 GPTIMER_Regs*)
-		
+    bool enabled;
+    GPTIMER_Regs *timer_instance;
+
+    /* Dual-PWM H-bridge interface (DRV8870 IN1/IN2). */
+    uint32_t pwm_cc_index;
+    GPTIMER_Regs *second_timer_instance;
+    uint32_t second_pwm_cc_index;
+    bool polarity;
+
 		// L298N INTERFACE
     uint32_t cc_reverse_pwm_index; // 反向 PWM 通道索引 (例如 DL_TIMER_CC_0_INDEX)
     uint32_t cc_forward_pwm_index; // 正向 PWM 通道索引 (例如 DL_TIMER_CC_1_INDEX)
-		// L298N INTERFACE
-	
-		// TB6612 + 74hc595 INTERFACE
-		// PWM 输出通道索引 (如果方向由 GPIO 控制，只需要一个 PWM 通道)
-		uint32_t pwm_cc_index;
-		bool polarity;
-		// TB6612 + 74hc595 INTERFACE
-	
+
 } MotorConfig;
 
 // 系统级电机参数配置结构体
@@ -52,7 +51,8 @@ typedef struct {
 typedef struct motorHardWareInterface {
     void (*enable_all_motor)(const MotorSystemConfig* config);
     void (*disable_all_motor)(const MotorSystemConfig* config);
-    void (*set_pwms)(const MotorSystemConfig* sys_config, int*); // 原有的按电机编号设置 PWM
+    void (*set_pwms)(const MotorSystemConfig* sys_config,
+        const int *pwms); // 原有的按电机编号设置 PWM
 } motorHardWareInterface;
 
 extern motorHardWareInterface l298n_interface; // 具体的 L298N 实现接口

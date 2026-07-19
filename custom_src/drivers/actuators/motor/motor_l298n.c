@@ -9,7 +9,8 @@
 // 声明 L298N 驱动内部函数 (static)
 static void l298n_enable_all_motor_impl(const MotorSystemConfig* g_motor_system_config);
 static void l298n_disable_all_motor_impl(const MotorSystemConfig* g_motor_system_config);
-static void l298n_set_pwms_impl(const MotorSystemConfig* g_motor_system_config, int *pwms);
+static void l298n_set_pwms_impl(const MotorSystemConfig* g_motor_system_config,
+    const int *pwms);
 
 // 具体的 L298N 驱动接口实现
 motorHardWareInterface l298n_interface = {
@@ -78,7 +79,8 @@ static void l298n_disable_all_motor_impl(const MotorSystemConfig* g_motor_system
 }
 
 // 原有的按电机编号设置 PWM 函数，现在内部调用新的函数
-static void l298n_set_pwms_impl(const MotorSystemConfig* g_motor_system_config, int *pwms) {
+static void l298n_set_pwms_impl(const MotorSystemConfig* g_motor_system_config,
+    const int *pwms) {
     for (int i = 0; i < g_motor_system_config->motor_count; i++) {
 			MotorConfig config = g_motor_system_config->motors[i];
 			if (!config.enabled) {

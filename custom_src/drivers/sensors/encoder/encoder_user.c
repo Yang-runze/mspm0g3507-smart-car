@@ -21,19 +21,23 @@ encoder_manager_t robot_encoder_manager = {
     .exit_critical_func = NULL,     // 在 init 中设置
 };
 
-#define MAX_GPIO_IIDX_IN_USE 255
+#define ENCODER_PORTB_MAP_OFFSET 64U
+#define ENCODER_PORTA_MAP(iidx) ((uint16_t) (iidx))
+#define ENCODER_PORTB_MAP(iidx) \
+    ((uint16_t) (ENCODER_PORTB_MAP_OFFSET + (uint16_t) (iidx)))
+#define MAX_GPIO_MAP_ENTRIES 128U
 
-static encoder_instance_t* interrupt_iidx_to_encoder_instance[MAX_GPIO_IIDX_IN_USE];
+static encoder_instance_t* interrupt_map_to_encoder_instance[MAX_GPIO_MAP_ENTRIES];
 
 static const encoder_pin_config_t encoder_pins[] = {
-    {PORTB_ENCODER_1_PIN, PORTB_ENCODER_1_IIDX},
-    {PORTB_ENCODER_2_PIN, PORTB_ENCODER_2_IIDX},
-    {PORTB_ENCODER_3_PIN, PORTB_ENCODER_3_IIDX},
-    {PORTB_ENCODER_4_PIN, PORTB_ENCODER_4_IIDX},
-//    {PORTB_ENCODER_5_PIN, PORTB_ENCODER_5_IIDX},
-//    {PORTB_ENCODER_6_PIN, PORTB_ENCODER_6_IIDX},
-//    {PORTB_ENCODER_7_PIN, PORTB_ENCODER_7_IIDX},
-//    {PORTB_ENCODER_8_PIN, PORTB_ENCODER_8_IIDX},
+    {PORTA_PORT, PORTA_M1_ENCODER_A_PIN,
+        ENCODER_PORTA_MAP(PORTA_M1_ENCODER_A_IIDX)},
+    {PORTB_PORT, PORTB_M1_ENCODER_B_PIN,
+        ENCODER_PORTB_MAP(PORTB_M1_ENCODER_B_IIDX)},
+    {PORTA_PORT, PORTA_M2_ENCODER_A_PIN,
+        ENCODER_PORTA_MAP(PORTA_M2_ENCODER_A_IIDX)},
+    {PORTA_PORT, PORTA_M2_ENCODER_B_PIN,
+        ENCODER_PORTA_MAP(PORTA_M2_ENCODER_B_IIDX)},
 };
 
 #define NUM_ENCODER_PINS (sizeof(encoder_pins) / sizeof(encoder_pins[0]))
@@ -46,10 +50,11 @@ uint8_t mspm0_gpio_read(void *gpio_handle, uint32_t pin_mask) {
 
 // 中断挂载函数
 bool mspm0_attach_interrupt(void *pin_handle, void (*isr_handler)(void *arg), void *arg) {
-    uint8_t map_index = (uint8_t)(uintptr_t)pin_handle; // 使用 IIDX 作为索引
+    uint16_t map_index = (uint16_t)(uintptr_t)pin_handle;
+    (void) isr_handler;
     
-    if (map_index < MAX_GPIO_IIDX_IN_USE) {
-        interrupt_iidx_to_encoder_instance[map_index] = (encoder_instance_t*)arg;
+    if (map_index < MAX_GPIO_MAP_ENTRIES) {
+        interrupt_map_to_encoder_instance[map_index] = (encoder_instance_t*)arg;
         return true; 
     } else {
         log_e("Invalid pin handle index (IIDX) for interrupt attachment: %u", map_index);
@@ -62,15 +67,17 @@ void encoder_group1_irq_handler(void)
 {       
 		// 遍历所有编码器引脚，处理中断
 		for (uint8_t i = 0; i < NUM_ENCODER_PINS; i++) {
-				if (DL_GPIO_getEnabledInterruptStatus(PORTB_PORT, encoder_pins[i].pin_mask)) {
+				if (DL_GPIO_getEnabledInterruptStatus(encoder_pins[i].port,
+                        encoder_pins[i].pin_mask)) {
 						// 清除对应引脚的中断标志
-						DL_GPIO_clearInterruptStatus(PORTB_PORT, encoder_pins[i].pin_mask);
+						DL_GPIO_clearInterruptStatus(encoder_pins[i].port,
+                            encoder_pins[i].pin_mask);
 						
 						// 获取对应的编码器实例
-						uint8_t map_index = (uint8_t)(uintptr_t)encoder_pins[i].iidx;
-						if (map_index < MAX_GPIO_IIDX_IN_USE && 
-								interrupt_iidx_to_encoder_instance[map_index] != NULL) {
-								encoder_update(interrupt_iidx_to_encoder_instance[map_index]);
+						uint16_t map_index = encoder_pins[i].map_index;
+						if (map_index < MAX_GPIO_MAP_ENTRIES &&
+								interrupt_map_to_encoder_instance[map_index] != NULL) {
+								encoder_update(interrupt_map_to_encoder_instance[map_index]);
 						}
 				}
 		}   
@@ -81,23 +88,27 @@ void encoder_group1_irq_handler(void)
 void encoder_application_init(void) {
     // 定义编码器配置数组
     encoder_config_t encoder_configs[NUM_ROBOT_ENCODERS] = {
-        // Encoder 0 (右轮)
+        // Encoder 0 (left wheel: A=PA22, B=PB24)
         {
-            .pin1_gpio_handle = PORTB_PORT, 
-            .pin1_bitmask = PORTB_ENCODER_1_PIN, // 右轮 A 相
-            .pin1_handle = (void*)(uintptr_t)PORTB_ENCODER_1_IIDX,
+            .pin1_gpio_handle = PORTA_PORT,
+            .pin1_bitmask = PORTA_M1_ENCODER_A_PIN,
+            .pin1_handle = (void*)(uintptr_t)
+                ENCODER_PORTA_MAP(PORTA_M1_ENCODER_A_IIDX),
             .pin2_gpio_handle = PORTB_PORT, 
-            .pin2_bitmask = PORTB_ENCODER_2_PIN, // 右轮 B 相
-            .pin2_handle = (void*)(uintptr_t)PORTB_ENCODER_2_IIDX
+            .pin2_bitmask = PORTB_M1_ENCODER_B_PIN,
+            .pin2_handle = (void*)(uintptr_t)
+                ENCODER_PORTB_MAP(PORTB_M1_ENCODER_B_IIDX)
         },
-        // Encoder 1 (左轮)
+        // Encoder 1 (right wheel: A=PA24, B=PA26)
         {
-            .pin1_gpio_handle = PORTB_PORT, 
-            .pin1_bitmask = PORTB_ENCODER_4_PIN, // 左轮 A 相
-            .pin1_handle = (void*)(uintptr_t)PORTB_ENCODER_4_IIDX,
-            .pin2_gpio_handle = PORTB_PORT, 
-            .pin2_bitmask = PORTB_ENCODER_3_PIN, // 左轮 B 相
-            .pin2_handle = (void*)(uintptr_t)PORTB_ENCODER_3_IIDX
+            .pin1_gpio_handle = PORTA_PORT,
+            .pin1_bitmask = PORTA_M2_ENCODER_A_PIN,
+            .pin1_handle = (void*)(uintptr_t)
+                ENCODER_PORTA_MAP(PORTA_M2_ENCODER_A_IIDX),
+            .pin2_gpio_handle = PORTA_PORT,
+            .pin2_bitmask = PORTA_M2_ENCODER_B_PIN,
+            .pin2_handle = (void*)(uintptr_t)
+                ENCODER_PORTA_MAP(PORTA_M2_ENCODER_B_IIDX)
         },
         // Encoder 2
 //        {
@@ -131,5 +142,6 @@ void encoder_application_init(void) {
     );
     
     // 启用相关的 GPIO 中断向量
+    NVIC_EnableIRQ(PORTA_INT_IRQN);
     NVIC_EnableIRQ(PORTB_INT_IRQN);
 }

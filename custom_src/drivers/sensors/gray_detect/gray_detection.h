@@ -9,17 +9,15 @@
 #define TRACK_SENSOR_COUNT 8 // <--- 修改这里，支持 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 
 //#define USE_PCA9555 			  // PCA9555 IO扩展芯片循迹板
-#define USE_GW_GRAY 			  	// 感为传感器循迹板
+#define USE_GW_AUX_BOARD       // 感为无 MCU 灰度辅助板 CLK/DAT 模式
 //#define USE_GPIO						// IO口直接循迹
 //#define USE_CAM								// 使用视觉循迹
 
-#ifdef USE_GW_GRAY
+#ifdef USE_GW_AUX_BOARD
 
-/* 默认地址 */
-#define GW_GRAY_ADDR_DEF 0x4C
-
-/* 开启开关数据模式 */
-#define GW_GRAY_DIGITAL_MODE 0xDD
+#define GW_AUX_CLOCK_DELAY_US     2U
+#define GW_AUX_DATA_ACTIVE_LOW    1U
+#define GW_AUX_DATA_MSB_FIRST     1U
 
 #endif
 

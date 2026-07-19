@@ -11,6 +11,43 @@ u8g2_t u8g2;
 
 #if OLED_DRIVER_MODE == OLED_DRIVER_MODE_SPI
 
+/*
+ * HS96L01W4S03 module-specific SSD1306 settings from the vendor datasheet.
+ * The generic U8g2 SSD1306 setup is retained for framebuffer handling, then
+ * these values are applied so the panel uses its documented page mode and
+ * analogue drive settings.
+ */
+static void oled_hs96l01w4s03_apply_settings(void)
+{
+    static const uint8_t init_sequence[] = {
+        0xAE,       /* Display off */
+        0x00,       /* Low column address */
+        0x10,       /* High column address */
+        0x40,       /* Display start line */
+        0x81, 0xCF, /* Contrast */
+        0xA1,       /* Segment remap */
+        0xC8,       /* COM scan direction */
+        0xA6,       /* Normal display */
+        0xA8, 0x3F, /* 1/64 multiplex */
+        0xD3, 0x00, /* Display offset */
+        0xD5, 0x80, /* Display clock */
+        0xD9, 0xF1, /* Pre-charge period */
+        0xDA, 0x12, /* COM pin configuration */
+        0xDB, 0x30, /* VCOMH level required by this module */
+        0x20, 0x02, /* Page addressing mode */
+        0x8D, 0x14, /* Enable internal charge pump */
+        0xA4,       /* Display follows RAM */
+        0xAF        /* Display on */
+    };
+    uint32_t i;
+
+    (void) u8x8_cad_StartTransfer(&u8g2.u8x8);
+    for (i = 0U; i < (sizeof(init_sequence) / sizeof(init_sequence[0])); i++) {
+        (void) u8x8_cad_SendCmd(&u8g2.u8x8, init_sequence[i]);
+    }
+    (void) u8x8_cad_EndTransfer(&u8g2.u8x8);
+}
+
 // SPI 模式的 OLED 初始化
 void oled_spi_hardware_init(void)
 {
@@ -18,10 +55,10 @@ void oled_spi_hardware_init(void)
 
     // 复位 OLED
     OLED_RST_Clr();
-    // 使用 FreeRTOS 延时，避免阻塞整个系统
-    delay_ms(10);
+    /* The HS96L01W4S03 reference sequence holds reset low for 200 ms. */
+    delay_ms(200);
     OLED_RST_Set();
-		delay_ms(10);
+		delay_ms(100);
 
     // 拉高 CS (根据硬件连接和时序要求调整)
     OLED_CS_Set();
@@ -119,9 +156,9 @@ void oled_i2c_hardware_init(void)
 				DL_GPIO_HIZ_ENABLE              // 启用高阻态，符合 I2C 开漏模式
 		);
 
-		// 配置 SDA 引脚 (复用 SPI 的 PICO 引脚)
+		// 配置 SDA0 引脚
 		DL_GPIO_initDigitalOutputFeatures(
-				OLED_I2C_SDA_IOMUX,          // 引脚 IOMUX 定义，复用 SPI 的 PICO
+				OLED_I2C_SDA_IOMUX,
 				DL_GPIO_INVERSION_DISABLE,      // 不反转
 				DL_GPIO_RESISTOR_NONE,          // （I2C 通常需要外部上拉电阻）
 				DL_GPIO_DRIVE_STRENGTH_HIGH,     // 驱动强度设为低（可根据硬件需求调整）
@@ -135,13 +172,7 @@ void oled_i2c_hardware_init(void)
     // 启用输出功能
     DL_GPIO_enableOutput(OLED_I2C_SCL_PORT, OLED_I2C_SCL_PIN);
     DL_GPIO_enableOutput(OLED_I2C_SDA_PORT, OLED_I2C_SDA_PIN);
-		
-		    // 复位 OLED
-    OLED_I2C_RST_Clr();
-    // 使用 FreeRTOS 延时，避免阻塞整个系统
-    delay_ms(10);
-    OLED_I2C_RST_Set();
-    delay_ms(10);
+    delay_ms(10U);
 }
 
 // U8g2 I2C GPIO 和延时回调函数
@@ -162,8 +193,8 @@ uint8_t u8x8_gpio_and_delay_mspm0(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, vo
 
     // I2C 总线延时 (通常用于时钟拉伸或数据稳定延时)
     case U8X8_MSG_DELAY_I2C:
-        // 使用你的微秒延时函数
-        //delay_us(arg_int <= 2 ? 5 : 1); // 确保这里的延时足够长以满足 I2C 时序要求
+        (void) arg_int;
+        delay_us(2U);
         break;
 
     // I2C时钟信号控制
@@ -187,6 +218,13 @@ uint8_t u8x8_gpio_and_delay_mspm0(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, vo
 
 #endif // OLED_DRIVER_MODE_I2C
 
+void oled_force_all_pixels(bool enable)
+{
+    (void) u8x8_cad_StartTransfer(&u8g2.u8x8);
+    (void) u8x8_cad_SendCmd(&u8g2.u8x8, enable ? 0xA5U : 0xA4U);
+    (void) u8x8_cad_EndTransfer(&u8g2.u8x8);
+}
+
 // U8g2 初始化函数
 void u8g2_Init(void)
 {
@@ -197,10 +235,15 @@ void u8g2_Init(void)
 #elif OLED_DRIVER_MODE == OLED_DRIVER_MODE_I2C
     // 初始化 U8g2，使用 I2C 驱动
     u8g2_Setup_ssd1306_i2c_128x64_noname_f(&u8g2, U8G2_R2, u8x8_byte_sw_i2c, u8x8_gpio_and_delay_mspm0);
+    u8g2_SetI2CAddress(&u8g2, 0x3CU << 1U);
 #endif
 
     // 初始化显示屏（发送初始化命令）
     u8g2_InitDisplay(&u8g2);
+
+#if OLED_DRIVER_MODE == OLED_DRIVER_MODE_SPI
+    oled_hs96l01w4s03_apply_settings();
+#endif
 
     // 打开显示屏
     u8g2_SetPowerSave(&u8g2, 0);

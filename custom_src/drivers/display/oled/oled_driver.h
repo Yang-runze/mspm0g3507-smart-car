@@ -8,6 +8,7 @@
 #define __OLED_DRIVER_H__
 
 #include "stdint.h"
+#include "stdbool.h"
 #include "delay.h"
 #include "u8g2.h"
 #include "ti_msp_dl_config.h"
@@ -17,7 +18,7 @@
 #define OLED_DRIVER_MODE_SPI 1
 #define OLED_DRIVER_MODE_I2C 2
 
-#define OLED_DRIVER_MODE OLED_DRIVER_MODE_SPI
+#define OLED_DRIVER_MODE OLED_DRIVER_MODE_I2C
 
 #if OLED_DRIVER_MODE == OLED_DRIVER_MODE_SPI
 
@@ -30,19 +31,15 @@
 
 #elif OLED_DRIVER_MODE == OLED_DRIVER_MODE_I2C
 
-// I2C 模式下使用的 GPIO 定义 (通常与 SPI 复用)
-// 你的代码中复用了 SPI 的 PICO 和 SCLK 引脚作为 I2C 的 SDA 和 SCL
-#define OLED_I2C_SDA_PORT   GPIO_SPI_0_PICO_PORT
-#define OLED_I2C_SDA_PIN    GPIO_SPI_0_PICO_PIN
+// 4-wire SSD1306 OLED: VCC, GND, SDA0=PA16, SCL0=PA17.
+#define OLED_I2C_SDA_PORT   PORTA_PORT
+#define OLED_I2C_SDA_PIN    PORTA_OLED_SDA_PIN
 
-#define OLED_I2C_SCL_PORT   GPIO_SPI_0_SCLK_PORT
-#define OLED_I2C_SCL_PIN    GPIO_SPI_0_SCLK_PIN
+#define OLED_I2C_SCL_PORT   PORTA_PORT
+#define OLED_I2C_SCL_PIN    PORTA_OLED_SCL_PIN
 
-#define OLED_I2C_SCL_IOMUX 	GPIO_SPI_0_IOMUX_SCLK
-#define OLED_I2C_SDA_IOMUX  GPIO_SPI_0_IOMUX_PICO
-
-#define OLED_I2C_RST_PORT PORTB_PORT 
-#define OLED_I2C_RST_PIN  PORTB_OLED_RST_PIN
+#define OLED_I2C_SCL_IOMUX PORTA_OLED_SCL_IOMUX
+#define OLED_I2C_SDA_IOMUX PORTA_OLED_SDA_IOMUX
 
 #define OLED_SDA_Clr() DL_GPIO_clearPins(OLED_I2C_SDA_PORT, OLED_I2C_SDA_PIN)
 #define OLED_SDA_Set() DL_GPIO_setPins(OLED_I2C_SDA_PORT, OLED_I2C_SDA_PIN)
@@ -50,12 +47,10 @@
 #define OLED_SCL_Clr() DL_GPIO_clearPins(OLED_I2C_SCL_PORT, OLED_I2C_SCL_PIN)
 #define OLED_SCL_Set() DL_GPIO_setPins(OLED_I2C_SCL_PORT, OLED_I2C_SCL_PIN)
 
-#define OLED_I2C_RST_Clr() DL_GPIO_clearPins(OLED_I2C_RST_PORT, OLED_I2C_RST_PIN)
-#define OLED_I2C_RST_Set() DL_GPIO_setPins(OLED_I2C_RST_PORT, OLED_I2C_RST_PIN)
-
 #endif // OLED_DRIVER_MODE_I2C
 
 void u8g2_Init(void);
+void oled_force_all_pixels(bool enable);
 
 extern u8g2_t u8g2;
 

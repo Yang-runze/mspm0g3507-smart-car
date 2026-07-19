@@ -26,7 +26,7 @@
 #include "encoder.h"                        // 编码器硬件驱动
 #include "no_mcu_ganv.h"                    // 无MCU灰度传感器驱动
 #include "vl53l1_read.h"                    // VL53L1激光测距传感器
-#include "wit_jyxx.h"                       // 维特智能姿态传感器
+#include "lengke_gyro.h"                   // 棱科智能单轴陀螺仪
 #include "attitude_algorithm.h"
 #include "lsm6dsv16x.h"
 
@@ -34,7 +34,6 @@
 #include "motor_hardware.h"                 // 电机硬件驱动层
 
 // 通信设备
-#include "bluetooth.h"                      // 蓝牙通信驱动
 #include "maix_cam.h"												// MAIX摄像头
 
 // 音视觉设备
@@ -44,7 +43,6 @@
 //==============================================================================
 // 中间件层 (Middleware Layer)
 //==============================================================================
-#include "serialplot_protocol.h"           // 串口绘图通信协议
 #include "periodic_event_task.h"           // 周期性事件任务管理
 #include "cam_protocol.h"									 // 私有摄像头协议
 
@@ -61,17 +59,10 @@
 #include "voice_light_alert.h"              // 语音灯光报警组件
 
 //==============================================================================
-// 业务逻辑层 (Business Logic Layer)
-//==============================================================================
-#include "car_controller.h"                 // 小车控制器
-#include "car_state_machine.h"              // 小车状态机
-
-//==============================================================================
 // 应用层 (Application Layer)
 //==============================================================================
 #include "ui.h"                            // 用户界面
 #include "tests.h"                         // 测试模块
-#include "car_debug.h"                     // 小车调试模块
 
 #endif // COMMON_INCLUDE_H
 
