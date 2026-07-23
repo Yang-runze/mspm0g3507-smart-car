@@ -1,13 +1,14 @@
 #include "ti_msp_dl_config.h"
 #include "tests.h"
-#include "rgb_led.h"
+#include "beep.h"
+#include "board_led.h"
 
 static void board_init(void)
 {
     SYSCFG_DL_init();
-    /* ULN2001 input is active-high; keep PA30 low so the buzzer stays off. */
-    DL_GPIO_clearPins(PORTA_PORT, PORTA_BUZZER_PIN);
-    rgb_led_init();
+    /* PB3 drives the active-high buzzer enable through ULN2001. */
+    beep_init();
+    board_led_init();
 }
 
 int main(void)
@@ -22,7 +23,7 @@ int main(void)
 
 void HardFault_Handler(void)
 {
-    led_set_color(COLOR_RED);
+    board_led_set(true);
 
     while (1) {
     }

@@ -2,19 +2,23 @@
 
 #include <stdio.h>
 
+#include "beep.h"
 #include "delay.h"
 #include "encoder_user.h"
+#include "gimbal_uart.h"
 #include "gray_detection.h"
 #include "gray_pid_tracking_test.h"
 #include "gyro_pid_control_test.h"
+#include "h24_figure_eight.h"
 #include "hal_uart.h"
 #include "lengke_gyro.h"
 #include "maix_cam.h"
 #include "motor_speed_pid_test.h"
 #include "motor_user.h"
 #include "oled_driver.h"
-#include "rgb_led.h"
+#include "board_led.h"
 #include "systick.h"
+#include "ui_button.h"
 
 static void test_display(const char *title, const char *line1, const char *line2,
     const char *line3)
@@ -52,13 +56,13 @@ static void test_oled(void)
 
     /*
      * Test steps:
-     * 1. Use the production u8g2_Init() path and the configured SPI1 hardware.
+     * 1. Use the production u8g2_Init() path and PA16/PA17 software I2C.
      * 2. Draw a border, text, and a moving bar into the U8g2 frame buffer.
      * 3. Send the complete frame repeatedly through u8g2_SendBuffer().
      * Pass condition: the OLED shows the test pattern and the bar moves.
      */
     u8g2_Init();
-    led_set_color(COLOR_GREEN);
+    board_led_set(true);
 
     for (;;) {
         u8g2_ClearBuffer(&u8g2);
@@ -78,32 +82,62 @@ static void test_oled(void)
     }
 }
 
-static void test_rgb_led(void)
+static void test_board_led(void)
 {
     /*
      * Test steps:
-     * 1. Output red, green, blue, white, then off for one second each.
-     * 2. Repeat the sequence.
-     * Pass condition: the RGB LED follows the five colours in this order.
+     * 1. Drive the Tianmengxing onboard B22 LED from PB22.
+     * 2. Toggle it once per second.
+     * Pass condition: the onboard B22 LED turns on and off repeatedly.
      */
-    test_display_init("RGB LED TEST");
+    test_display_init("BOARD LED TEST");
 
     for (;;) {
-        led_set_color(COLOR_RED);
-        test_display("RGB LED TEST", "RED", "PB26", "");
+        board_led_set(true);
+        test_display("BOARD LED TEST", "B22 LED ON", "PB22 = HIGH", "active high");
         delay_ms(1000U);
-        led_set_color(COLOR_GREEN);
-        test_display("RGB LED TEST", "GREEN", "PB27", "");
+        board_led_set(false);
+        test_display("BOARD LED TEST", "B22 LED OFF", "PB22 = LOW", "repeats");
         delay_ms(1000U);
-        led_set_color(COLOR_BLUE);
-        test_display("RGB LED TEST", "BLUE", "PB22", "");
+    }
+}
+
+static void test_buzzer(void)
+{
+    test_display_init("BUZZER TEST");
+    beep_init();
+
+    for (;;) {
+        beep_on();
+        test_display("BUZZER TEST", "PB3 EN = HIGH", "BUZZER ON", "active high");
+        delay_ms(500U);
+        beep_off();
+        test_display("BUZZER TEST", "PB3 EN = LOW", "BUZZER OFF", "");
         delay_ms(1000U);
-        led_set_color(COLOR_WHITE);
-        test_display("RGB LED TEST", "WHITE", "R+G+B", "");
-        delay_ms(1000U);
-        led_off();
-        test_display("RGB LED TEST", "OFF", "sequence repeats", "");
-        delay_ms(1000U);
+    }
+}
+
+static void test_buttons(void)
+{
+    char first_row[22];
+    char second_row[22];
+
+    test_display_init("4 BUTTON TEST");
+
+    for (;;) {
+        bool key1 = user_button_is_pressed(BUTTON_RIGHT);
+        bool key2 = user_button_is_pressed(BUTTON_LEFT);
+        bool key3 = user_button_is_pressed(BUTTON_DOWN);
+        bool key4 = user_button_is_pressed(BUTTON_UP);
+
+        (void) snprintf(first_row, sizeof(first_row), "K1:%c K2:%c",
+            key1 ? 'P' : '-', key2 ? 'P' : '-');
+        (void) snprintf(second_row, sizeof(second_row), "K3:%c K4:%c",
+            key3 ? 'P' : '-', key4 ? 'P' : '-');
+        board_led_set(key1 || key2 || key3 || key4);
+        test_display("4 BUTTON TEST", first_row, second_row,
+            "26 27 B25 B20");
+        delay_ms(20U);
     }
 }
 
@@ -130,7 +164,7 @@ static void test_motor(void)
         int32_t previous_left_count;
         int32_t previous_right_count;
 
-        led_set_color(COLOR_GREEN);
+        board_led_set(true);
         motor_set_pwms(both_forward_pwms);
         phase_start_ms = get_ms();
         previous_sample_ms = phase_start_ms;
@@ -172,10 +206,10 @@ static void test_motor(void)
         }
 
         motor_set_pwms(stop_pwms);
-        led_off();
+        board_led_set(false);
         delay_ms(MOTOR_DIRECTION_CHANGE_COAST_MS);
 
-        led_set_color(COLOR_BLUE);
+        board_led_set(true);
         motor_set_pwms(both_backward_pwms);
         phase_start_ms = get_ms();
         previous_sample_ms = phase_start_ms;
@@ -217,7 +251,7 @@ static void test_motor(void)
         }
 
         motor_set_pwms(stop_pwms);
-        led_off();
+        board_led_set(false);
         delay_ms(MOTOR_DIRECTION_CHANGE_COAST_MS);
     }
 }
@@ -235,15 +269,15 @@ static void test_encoder(void)
      * 1. Start both motors at a low speed for two seconds.
      * 2. Stop both motors and display the two quadrature counts.
      * 3. Repeat; each count must change while the corresponding wheel turns.
-     * Pass condition: left PA22/PB24 and right PA24/PA26 counts are non-zero.
+     * Pass condition: motor C PB13/PB12 and motor D PA29/PB26 counts are non-zero.
      */
     test_display_init("ENCODER TEST");
     encoder_application_init();
     motor_init();
 
     for (;;) {
-        led_set_color(COLOR_BLUE);
-        test_display("ENCODER TEST", "RUNNING 2s", "L PA22/PB24", "R PA24/PA26");
+        board_led_set(true);
+        test_display("ENCODER TEST", "RUNNING 2s", "C PB13/PB12", "D PA29/PB26");
         motor_set_pwms(forward_pwms);
         delay_ms(2000U);
         motor_set_pwms(stop_pwms);
@@ -252,7 +286,7 @@ static void test_encoder(void)
             (long) encoder_manager_read(&robot_encoder_manager, 0U));
         (void) snprintf(motor2_text, sizeof(motor2_text), "R count: %ld",
             (long) encoder_manager_read(&robot_encoder_manager, 1U));
-        led_set_color(COLOR_GREEN);
+        board_led_set(false);
         test_display("ENCODER TEST", motor1_text, motor2_text, "turn wheels to verify");
         delay_ms(2500U);
     }
@@ -265,8 +299,8 @@ static void test_gray_sensor(void)
 
     /*
      * Test steps:
-     * 1. Clock eight bits from the auxiliary board using PA12 (CLK).
-     * 2. Read the data stream from PA13 (DAT) and show it in hex and binary.
+     * 1. Clock eight bits from the auxiliary board using PB27 (CLK).
+     * 2. Read the data stream from PB23 (DAT) and show it in hex and binary.
      * 3. Move black and white material under each sensor channel.
      * Pass condition: the displayed bit pattern changes with the covered channel.
      */
@@ -284,8 +318,8 @@ static void test_gray_sensor(void)
             (display_value & 0x20U) ? '1' : '0', (display_value & 0x10U) ? '1' : '0',
             (display_value & 0x08U) ? '1' : '0', (display_value & 0x04U) ? '1' : '0',
             (display_value & 0x02U) ? '1' : '0', (display_value & 0x01U) ? '1' : '0');
-        led_set_color(raw_value == 0U ? COLOR_RED : COLOR_GREEN);
-        test_display("GRAY SENSOR", raw_text, bit_text, "CLK PB15 DAT PB16");
+        board_led_set(raw_value != 0U);
+        test_display("GRAY SENSOR", raw_text, bit_text, "CLK PB27 DAT PB23");
         delay_ms(100U);
     }
 }
@@ -306,7 +340,7 @@ static void test_gyro(void)
 
     /*
      * Test steps:
-     * 1. Enable UART3 RX interrupt on PB3; the gyro TX must connect to PB3.
+     * 1. Enable UART1 RX interrupt on PA9; the gyro TX must connect to PA9.
      * 2. Parse Lengke 5-byte frames: 0x5A/0xAA is Z rate and 0x5A/0xBB is Yaw.
      * 3. Rotate the sensor around its Z axis and observe Yaw and Z rate.
      * Pass condition: frame count becomes non-zero and both values change.
@@ -315,7 +349,7 @@ static void test_gyro(void)
     lengke_gyro_init();
 
     /* The manual specifies a maximum 500 ms startup time. */
-    test_display("LENGKE GYRO", "Wait module 500ms", "UART3 RX=PB3", "TX=PB2 MFCLK");
+    test_display("LENGKE GYRO", "Wait module 500ms", "UART1 RX=PA9", "TX=PA8 MFCLK");
     delay_ms(600U);
 
     /*
@@ -327,7 +361,7 @@ static void test_gyro(void)
         lengke_gyro_set_host_baud_rate(baud_rates[index]);
         (void) snprintf(baud_text, sizeof(baud_text), "Try baud: %lu",
             (unsigned long) baud_rates[index]);
-        test_display("LENGKE GYRO", baud_text, "Module TX -> PB3", "Scanning frames...");
+        test_display("LENGKE GYRO", baud_text, "Module TX -> PA9", "Scanning frames...");
         delay_ms(800U);
 
         if (lengke_gyro_has_valid_data()) {
@@ -356,7 +390,7 @@ static void test_gyro(void)
             (unsigned long) lengke_gyro_get_host_baud_rate(),
             (unsigned long) lengke_gyro_get_rx_byte_count(),
             (unsigned long) lengke_gyro_get_valid_frame_count());
-        led_set_color(lengke_gyro_has_valid_data() ? COLOR_GREEN : COLOR_RED);
+        board_led_set(lengke_gyro_has_valid_data());
         test_display("LENGKE GYRO", yaw_text, rate_text, frame_text);
         delay_ms(100U);
     }
@@ -369,10 +403,10 @@ static void test_camera_uart(void)
 
     /*
      * Test steps:
-     * 1. Enable CAM_UART RX interrupt on PA11 at 115200 baud.
+     * 1. Enable CAM_UART RX interrupt on PB18 at 115200 baud.
      * 2. Start MaixCam Pro or make it send any serial output/data.
      * 3. Observe the received byte counter and the most recent byte value.
-     * Pass condition: RX count increases when MaixCam sends data to PA11.
+     * Pass condition: RX count increases when MaixCam sends data to PB18.
      */
     test_display_init("MAIXCAM UART");
     (void) camera_init();
@@ -383,13 +417,76 @@ static void test_camera_uart(void)
             (unsigned long) camera_get_rx_byte_count());
         (void) snprintf(last_text, sizeof(last_text), "Last: 0x%02X",
             camera_get_last_rx_byte());
-        led_set_color(camera_get_rx_byte_count() != 0U ? COLOR_GREEN : COLOR_RED);
-        test_display("MAIXCAM UART", count_text, last_text, "RX PA11 TX PA10");
+        board_led_set(camera_get_rx_byte_count() != 0U);
+        test_display("MAIXCAM UART", count_text, last_text, "RX PB18 TX PA21");
         delay_ms(100U);
     }
 }
 
-static void test_camera_i2c(void)
+static void test_debug_uart(void)
+{
+    char rx_text[22];
+    uint32_t rx_count = 0U;
+    uint8_t last_byte = 0U;
+
+    test_display_init("DEBUG UART3");
+
+    for (;;) {
+        usart_printf(DEBUG_UART_INST,
+            "DEBUG UART3 TX=PA14 RX=PA25 heartbeat %lu\r\n",
+            (unsigned long) rx_count);
+
+        for (uint32_t poll = 0U; poll < 10U; poll++) {
+            while (!DL_UART_Main_isRXFIFOEmpty(DEBUG_UART_INST)) {
+                last_byte = DL_UART_Main_receiveData(DEBUG_UART_INST);
+                rx_count++;
+                usart_send_bytes(DEBUG_UART_INST, &last_byte, 1U);
+            }
+            delay_ms(50U);
+        }
+
+        (void) snprintf(rx_text, sizeof(rx_text), "RX:%lu last:%02X",
+            (unsigned long) rx_count, last_byte);
+        board_led_set(rx_count != 0U);
+        test_display("DEBUG UART3", "TX PA14 RX PA25", rx_text,
+            "115200 8N1");
+    }
+}
+
+static void test_gimbal_uart(void)
+{
+    char count_text[22];
+    uint32_t pass_count = 0U;
+    uint32_t error_count = 0U;
+    uint8_t tx_byte = 0U;
+    uint8_t rx_byte;
+
+    test_display_init("GIMBAL UART0");
+    gimbal_uart_init();
+
+    for (;;) {
+        gimbal_uart_send_byte(tx_byte);
+        delay_ms(5U);
+
+        if (gimbal_uart_receive_byte(&rx_byte)) {
+            if (rx_byte == tx_byte) {
+                pass_count++;
+            } else {
+                error_count++;
+            }
+        }
+
+        (void) snprintf(count_text, sizeof(count_text), "OK:%lu ERR:%lu",
+            (unsigned long) pass_count, (unsigned long) error_count);
+        board_led_set(pass_count != 0U && error_count == 0U);
+        test_display("GIMBAL UART0", "LOOP PA0 -> PA1", count_text,
+            "disconnect gimbal");
+        tx_byte++;
+        delay_ms(245U);
+    }
+}
+
+static void test_oled_i2c(void)
 {
     char sda_text[22];
     char scl_text[22];
@@ -398,22 +495,22 @@ static void test_camera_i2c(void)
 
     /*
      * Test steps:
-     * 1. Read the idle levels of I2C0 SDA=PA28 and SCL=PA31.
+     * 1. Read the idle levels of OLED SDA=PA16 and SCL=PA17.
      * 2. Verify the external 3.3 V pull-ups are fitted and both lines idle high.
-     * 3. This checks I2C wiring only; a transaction needs MaixCam's I2C address.
+     * 3. This checks the software-I2C wiring used by the OLED driver.
      * Pass condition: both SDA and SCL display HIGH when no transfer is active.
      */
-    test_display_init("MAIXCAM I2C");
+    test_display_init("OLED I2C");
 
     for (;;) {
-        sda_high = DL_GPIO_readPins(GPIOA, GPIO_I2C_0_SDA_PIN) != 0U;
-        scl_high = DL_GPIO_readPins(GPIOA, GPIO_I2C_0_SCL_PIN) != 0U;
-        (void) snprintf(sda_text, sizeof(sda_text), "SDA PA28: %s",
+        sda_high = DL_GPIO_readPins(PORTA_PORT, PORTA_OLED_SDA_PIN) != 0U;
+        scl_high = DL_GPIO_readPins(PORTA_PORT, PORTA_OLED_SCL_PIN) != 0U;
+        (void) snprintf(sda_text, sizeof(sda_text), "SDA PA16: %s",
             sda_high ? "HIGH" : "LOW");
-        (void) snprintf(scl_text, sizeof(scl_text), "SCL PA31: %s",
+        (void) snprintf(scl_text, sizeof(scl_text), "SCL PA17: %s",
             scl_high ? "HIGH" : "LOW");
-        led_set_color((sda_high && scl_high) ? COLOR_GREEN : COLOR_RED);
-        test_display("MAIXCAM I2C", sda_text, scl_text, "need 3V3 pullups");
+        board_led_set(sda_high && scl_high);
+        test_display("OLED I2C", sda_text, scl_text, "need 3V3 pullups");
         delay_ms(250U);
     }
 }
@@ -422,26 +519,36 @@ void module_test_run(void)
 {
 #if MODULE_TEST_SELECTED == MODULE_TEST_OLED
     test_oled();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_RGB_LED
-    test_rgb_led();
+#elif MODULE_TEST_SELECTED == MODULE_TEST_BOARD_LED
+    test_board_led();
+#elif MODULE_TEST_SELECTED == MODULE_TEST_BUZZER
+    test_buzzer();
 #elif MODULE_TEST_SELECTED == MODULE_TEST_MOTOR
     test_motor();
 #elif MODULE_TEST_SELECTED == MODULE_TEST_ENCODER
     test_encoder();
+#elif MODULE_TEST_SELECTED == MODULE_TEST_BUTTONS
+    test_buttons();
 #elif MODULE_TEST_SELECTED == MODULE_TEST_GRAY_SENSOR
     test_gray_sensor();
 #elif MODULE_TEST_SELECTED == MODULE_TEST_GYRO
     test_gyro();
 #elif MODULE_TEST_SELECTED == MODULE_TEST_CAMERA_UART
     test_camera_uart();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_CAMERA_I2C
-    test_camera_i2c();
+#elif MODULE_TEST_SELECTED == MODULE_TEST_OLED_I2C
+    test_oled_i2c();
 #elif MODULE_TEST_SELECTED == MODULE_TEST_GRAY_PID_TRACKING
     gray_pid_tracking_test_run();
 #elif MODULE_TEST_SELECTED == MODULE_TEST_GYRO_PID_CONTROL
     gyro_pid_control_test_run();
 #elif MODULE_TEST_SELECTED == MODULE_TEST_MOTOR_SPEED_PID
     motor_speed_pid_test_run();
+#elif MODULE_TEST_SELECTED == MODULE_TEST_DEBUG_UART
+    test_debug_uart();
+#elif MODULE_TEST_SELECTED == MODULE_TEST_GIMBAL_UART
+    test_gimbal_uart();
+#elif MODULE_TEST_SELECTED == MODULE_TEST_H24_FIGURE_EIGHT
+    h24_figure_eight_run();
 #else
 #error "MODULE_TEST_SELECTED is not a valid module test ID"
 #endif

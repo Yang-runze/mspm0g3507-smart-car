@@ -30,14 +30,14 @@ encoder_manager_t robot_encoder_manager = {
 static encoder_instance_t* interrupt_map_to_encoder_instance[MAX_GPIO_MAP_ENTRIES];
 
 static const encoder_pin_config_t encoder_pins[] = {
-    {PORTA_PORT, PORTA_M1_ENCODER_A_PIN,
-        ENCODER_PORTA_MAP(PORTA_M1_ENCODER_A_IIDX)},
+    {PORTB_PORT, PORTB_M1_ENCODER_A_PIN,
+        ENCODER_PORTB_MAP(PORTB_M1_ENCODER_A_IIDX)},
     {PORTB_PORT, PORTB_M1_ENCODER_B_PIN,
         ENCODER_PORTB_MAP(PORTB_M1_ENCODER_B_IIDX)},
     {PORTA_PORT, PORTA_M2_ENCODER_A_PIN,
         ENCODER_PORTA_MAP(PORTA_M2_ENCODER_A_IIDX)},
-    {PORTA_PORT, PORTA_M2_ENCODER_B_PIN,
-        ENCODER_PORTA_MAP(PORTA_M2_ENCODER_B_IIDX)},
+    {PORTB_PORT, PORTB_M2_ENCODER_B_PIN,
+        ENCODER_PORTB_MAP(PORTB_M2_ENCODER_B_IIDX)},
 };
 
 #define NUM_ENCODER_PINS (sizeof(encoder_pins) / sizeof(encoder_pins[0]))
@@ -88,27 +88,27 @@ void encoder_group1_irq_handler(void)
 void encoder_application_init(void) {
     // 定义编码器配置数组
     encoder_config_t encoder_configs[NUM_ROBOT_ENCODERS] = {
-        // Encoder 0 (left wheel: A=PA22, B=PB24)
+        // Encoder 0 / motor C (A=PB13, B=PB12)
         {
-            .pin1_gpio_handle = PORTA_PORT,
-            .pin1_bitmask = PORTA_M1_ENCODER_A_PIN,
+            .pin1_gpio_handle = PORTB_PORT,
+            .pin1_bitmask = PORTB_M1_ENCODER_A_PIN,
             .pin1_handle = (void*)(uintptr_t)
-                ENCODER_PORTA_MAP(PORTA_M1_ENCODER_A_IIDX),
+                ENCODER_PORTB_MAP(PORTB_M1_ENCODER_A_IIDX),
             .pin2_gpio_handle = PORTB_PORT, 
             .pin2_bitmask = PORTB_M1_ENCODER_B_PIN,
             .pin2_handle = (void*)(uintptr_t)
                 ENCODER_PORTB_MAP(PORTB_M1_ENCODER_B_IIDX)
         },
-        // Encoder 1 (right wheel: A=PA24, B=PA26)
+        // Encoder 1 / motor D (A=PA29, B=PB26)
         {
             .pin1_gpio_handle = PORTA_PORT,
             .pin1_bitmask = PORTA_M2_ENCODER_A_PIN,
             .pin1_handle = (void*)(uintptr_t)
                 ENCODER_PORTA_MAP(PORTA_M2_ENCODER_A_IIDX),
-            .pin2_gpio_handle = PORTA_PORT,
-            .pin2_bitmask = PORTA_M2_ENCODER_B_PIN,
+            .pin2_gpio_handle = PORTB_PORT,
+            .pin2_bitmask = PORTB_M2_ENCODER_B_PIN,
             .pin2_handle = (void*)(uintptr_t)
-                ENCODER_PORTA_MAP(PORTA_M2_ENCODER_B_IIDX)
+                ENCODER_PORTB_MAP(PORTB_M2_ENCODER_B_IIDX)
         },
         // Encoder 2
 //        {

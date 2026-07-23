@@ -4,35 +4,47 @@
 #include "motor_config.h"
 
 /*
- * Gyro cascaded PID tuning area.
+ * Gyro heading-hold cascade controller.
  *
- * The angle/rate gains below come from the manufacturer's GyroPID example:
- * yaw angle PID -> target Z rate -> Z-rate PID -> differential motor PWM.
+ * Runtime target yaw -> angle PI -> target Z rate -> rate PI
+ *                    -> differential motor PWM.
+ *
+ * The defaults are conservative bring-up values for the 12 V, 1:30
+ * XTARK MC520P30 motors and this project's 0...3000 PWM command range.
+ * They are starting values only; tune them on the complete vehicle.
  */
-#define GYRO_PID_ANGLE_KP                       6.55f
-#define GYRO_PID_ANGLE_KI                       0.03f
-#define GYRO_PID_ANGLE_KD                       0.00f
-#define GYRO_PID_ANGLE_INTEGRAL_LIMIT         300.0f
+#define GYRO_PID_ANGLE_KP                         5.0f
+#define GYRO_PID_ANGLE_KI                         0.0f
+/* Integral state unit: degree * second. Keep KI at zero for initial tuning. */
+#define GYRO_PID_ANGLE_INTEGRAL_LIMIT_DEG_S      20.0f
 
-#define GYRO_PID_RATE_KP                        0.450f
-#define GYRO_PID_RATE_KI                        0.025f
-#define GYRO_PID_RATE_KD                        0.000f
-#define GYRO_PID_RATE_INTEGRAL_LIMIT           80.0f
+/* Rate-loop units: KP = PWM/(deg/s), KI = PWM/degree. */
+#define GYRO_PID_RATE_KP                          4.0f
+#define GYRO_PID_RATE_KI                         12.0f
+/* Integral state unit: degree; KI * this value is integral-output PWM. */
+#define GYRO_PID_RATE_INTEGRAL_LIMIT_DEG         15.0f
 
-/* Scale the manufacturer's approximately +/-200 output to this car's PWM. */
-#define GYRO_PID_OUTPUT_SCALE                    6.0f
-#define GYRO_PID_TURN_DEAD_ZONE_PWM               96
-#define GYRO_PID_TARGET_RATE_LIMIT_DPS          180.0f
+#define GYRO_PID_TARGET_RATE_LIMIT_DPS            90.0f
+#define GYRO_PID_TURN_PWM_LIMIT                     600
 
-/* For in-place heading hold, set BASE_PWM to 0 and enable motor reverse. */
-#define GYRO_PID_TARGET_YAW_DEG                   0.0f
-#define GYRO_PID_BASE_PWM                         700
-#define GYRO_PID_MAX_PWM                         1400
-/* Keep 0 for the straight-line test; set 1 only after safe reversal testing. */
+/*
+ * The module yaw is zeroed before the countdown. Change this value to make the
+ * standalone test acquire another absolute heading, or call
+ * gyro_pid_set_target_yaw() later from application/command code.
+ */
+#define GYRO_PID_INITIAL_TARGET_YAW_DEG             0.0f
+/*
+ * Use a higher open-loop cruise command so this test has a speed closer to the
+ * 100...120 RPM motor-PID response test. With the 600 PWM turn limit, the
+ * commanded wheel range remains forward-only at 600...1800.
+ */
+#define GYRO_PID_BASE_PWM                        1200
+#define GYRO_PID_MAX_PWM                         1800
+/* Heading-hold driving defaults to forward-only motor commands. */
 #define GYRO_PID_ALLOW_MOTOR_REVERSE                0
 
 /* Change to -1.0f if steering correction runs in the opposite direction. */
-#define GYRO_PID_TURN_DIRECTION                   1.0f
+#define GYRO_PID_TURN_DIRECTION                   -1.0f
 
 #define GYRO_PID_CONTROL_PERIOD_MS                 10U
 #define GYRO_PID_DISPLAY_PERIOD_CYCLES             10U
@@ -44,6 +56,21 @@
 #error "GYRO_PID_MAX_PWM exceeds the configured motor PWM period"
 #endif
 
+#if GYRO_PID_BASE_PWM > GYRO_PID_MAX_PWM
+#error "GYRO_PID_BASE_PWM exceeds GYRO_PID_MAX_PWM"
+#endif
+
+#if !GYRO_PID_ALLOW_MOTOR_REVERSE && \
+    (GYRO_PID_TURN_PWM_LIMIT > GYRO_PID_BASE_PWM)
+#error "Forward-only turn limit would command motor reverse"
+#endif
+
+#if (GYRO_PID_BASE_PWM + GYRO_PID_TURN_PWM_LIMIT) > GYRO_PID_MAX_PWM
+#error "Base PWM plus turn limit exceeds GYRO_PID_MAX_PWM"
+#endif
+
+void gyro_pid_set_target_yaw(float target_yaw_deg);
+float gyro_pid_get_target_yaw(void);
 void gyro_pid_control_test_run(void);
 
 #endif

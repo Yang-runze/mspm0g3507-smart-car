@@ -9,7 +9,7 @@
 #include "hal_uart.h"
 #include "motor_user.h"
 #include "oled_driver.h"
-#include "rgb_led.h"
+#include "board_led.h"
 
 typedef struct {
     float integral;
@@ -204,7 +204,7 @@ void gray_pid_tracking_test_run(void)
     motor_init();
     motor_set_pwms(motor_pwms);
 
-    led_set_color(COLOR_BLUE);
+    board_led_set(false);
     gray_pid_start_countdown();
 
     for (;;) {
@@ -223,7 +223,7 @@ void gray_pid_tracking_test_run(void)
             motor_pwms[0] = gray_pid_clamp_pwm(base_pwm + (int) correction);
             motor_pwms[1] = gray_pid_clamp_pwm(base_pwm - (int) correction);
             lost_cycles = 0U;
-            led_set_color(COLOR_GREEN);
+            board_led_set(true);
         } else {
             lost_cycles++;
             gray_pid_reset_after_line_loss(&pid);
@@ -241,7 +241,7 @@ void gray_pid_tracking_test_run(void)
                 motor_pwms[0] = 0;
                 motor_pwms[1] = 0;
             }
-            led_set_color(COLOR_RED);
+            board_led_set(false);
         }
 
         motor_pwms[0] = gray_pid_apply_start_kick(&motor_start[0],

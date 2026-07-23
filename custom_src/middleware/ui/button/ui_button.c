@@ -1,4 +1,5 @@
-#include "ui.h"
+#include "ui_button.h"
+#include "ti_msp_dl_config.h"
 
 struct Button buttons[BUTTON_NUM]; //4个按键
 
@@ -9,20 +10,20 @@ static inline uint8_t read_button_GPIO(uint8_t button_id) {
 	{
 		case BUTTON_UP:
 			return DL_GPIO_readPins(PORTB_PORT, PORTB_KEY4_PIN) == 0 ? 0 : 1;
-			break;
 		case BUTTON_DOWN:
 			return DL_GPIO_readPins(PORTB_PORT, PORTB_KEY3_PIN) == 0 ? 0 : 1;
-			break;
 		case BUTTON_LEFT:
-			return DL_GPIO_readPins(PORTB_PORT, PORTB_KEY2_PIN) == 0 ? 0 : 1;
-			break;
+			return DL_GPIO_readPins(PORTA_PORT, PORTA_KEY2_PIN) == 0 ? 0 : 1;
 		case BUTTON_RIGHT:
-			return DL_GPIO_readPins(PORTB_PORT, PORTB_KEY1_PIN) == 0 ? 0 : 1;
-			break;
+			return DL_GPIO_readPins(PORTA_PORT, PORTA_KEY1_PIN) == 0 ? 0 : 1;
 		default:
-			return 0;
-			break;
+			return 1;
 	}
+}
+
+bool user_button_is_pressed(BUTTON_ID button_id)
+{
+    return read_button_GPIO((uint8_t) button_id) == 0U;
 }
 
 void user_button_init(BtnCallback single_click_cb, BtnCallback long_press_cb)

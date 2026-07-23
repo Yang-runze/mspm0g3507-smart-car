@@ -10,7 +10,7 @@
 #include "hal_uart.h"
 #include "motor_user.h"
 #include "oled_driver.h"
-#include "rgb_led.h"
+#include "board_led.h"
 #include "systick.h"
 
 typedef struct {
@@ -42,12 +42,11 @@ static int motor_speed_pid_calculate(motor_speed_pid_controller_t *pid,
 {
     float error = target_rpm - measured_rpm;
     float derivative = 0.0f;
+    float feedforward_output =
+        MOTOR_SPEED_PID_FEEDFORWARD_PWM_PER_RPM * target_rpm;
+    float integral_candidate;
+    float unsaturated_output;
     float output;
-
-    pid->integral_output += ki * error * dt_seconds;
-    pid->integral_output = motor_speed_pid_clamp(pid->integral_output,
-        -MOTOR_SPEED_PID_INTEGRAL_OUTPUT_LIMIT,
-        MOTOR_SPEED_PID_INTEGRAL_OUTPUT_LIMIT);
 
     if (pid->derivative_ready && dt_seconds > 0.0f) {
         derivative = (error - pid->last_error) / dt_seconds;
@@ -56,9 +55,30 @@ static int motor_speed_pid_calculate(motor_speed_pid_controller_t *pid,
             MOTOR_SPEED_PID_DERIVATIVE_LIMIT);
     }
 
-    output = (kp * error) + pid->integral_output + (kd * derivative);
-    output = motor_speed_pid_clamp(output, 0.0f,
+    integral_candidate = motor_speed_pid_clamp(
+        pid->integral_output + (ki * error * dt_seconds),
+        -MOTOR_SPEED_PID_INTEGRAL_OUTPUT_LIMIT,
+        MOTOR_SPEED_PID_INTEGRAL_OUTPUT_LIMIT);
+    unsaturated_output =
+        feedforward_output + (kp * error) +
+        integral_candidate + (kd * derivative);
+    output = motor_speed_pid_clamp(unsaturated_output, 0.0f,
         (float) MOTOR_SPEED_PID_MAX_PWM);
+
+    /*
+     * Conditional integration: accept the new integral when the total output
+     * is not saturated, or when the current error helps leave saturation.
+     */
+    if ((unsaturated_output == output) ||
+        ((unsaturated_output > output) && (error < 0.0f)) ||
+        ((unsaturated_output < output) && (error > 0.0f))) {
+        pid->integral_output = integral_candidate;
+    } else {
+        output = motor_speed_pid_clamp(
+            feedforward_output + (kp * error) +
+            pid->integral_output + (kd * derivative),
+            0.0f, (float) MOTOR_SPEED_PID_MAX_PWM);
+    }
 
     if (output > 0.0f && output < (float) MOTOR_SPEED_PID_DEAD_ZONE_PWM) {
         output = (float) MOTOR_SPEED_PID_DEAD_ZONE_PWM;
@@ -95,10 +115,30 @@ static int motor_speed_pid_tenths(float value)
     return (int) (value * 10.0f);
 }
 
+static float motor_speed_pid_get_target(uint32_t elapsed_ms)
+{
+#if MOTOR_SPEED_PID_ENABLE_TARGET_PROFILE
+    uint32_t step =
+        (elapsed_ms / MOTOR_SPEED_PID_STEP_HOLD_MS) % 3U;
+
+    if (step == 1U) {
+        return MOTOR_SPEED_PID_STEP_2_RPM;
+    }
+    if (step == 2U) {
+        return MOTOR_SPEED_PID_STEP_3_RPM;
+    }
+#else
+    (void) elapsed_ms;
+#endif
+
+    return MOTOR_SPEED_PID_TARGET_RPM;
+}
+
 static void motor_speed_pid_display(const char *line1, const char *line2,
     const char *line3)
 {
     u8g2_ClearBuffer(&u8g2);
+    /* Normal PID tuning page: restore the original readable 6x10 font. */
     u8g2_SetFont(&u8g2, u8g2_font_6x10_tr);
     u8g2_DrawStr(&u8g2, 0U, 12U, "MOTOR SPEED PID");
     u8g2_DrawStr(&u8g2, 0U, 28U, line1);
@@ -136,7 +176,7 @@ static void motor_speed_pid_fault(const char *message, int status_code)
     int motor_pwms[2] = {0, 0};
 
     motor_set_pwms(motor_pwms);
-    led_set_color(COLOR_RED);
+    board_led_set(true);
     motor_speed_pid_display(message, "MOTOR STOPPED", "RESET AFTER CHECK");
     /* Keep all 13 VOFA+ FireWater channels numeric even on a fault. */
     usart_printf(DEBUG_UART_INST,
@@ -144,6 +184,7 @@ static void motor_speed_pid_fault(const char *message, int status_code)
 
     for (;;) {
         motor_set_pwms(motor_pwms);
+        board_led_toggle();
         delay_ms(100U);
     }
 }
@@ -156,6 +197,7 @@ void motor_speed_pid_test_run(void)
     int32_t previous_left_count;
     int32_t previous_right_count;
     uint32_t last_control_ms;
+    uint32_t target_profile_start_ms;
     uint32_t telemetry_counter = 0U;
     uint32_t display_counter = 0U;
     uint32_t wrong_sign_cycles = 0U;
@@ -169,7 +211,7 @@ void motor_speed_pid_test_run(void)
     motor_set_pwms(motor_pwms);
     encoder_application_init();
     systick_init();
-    led_set_color(COLOR_BLUE);
+    board_led_set(false);
 
     encoder_manager_write(&robot_encoder_manager,
         MOTOR_SPEED_PID_LEFT_ENCODER_INDEX, 0);
@@ -182,10 +224,13 @@ void motor_speed_pid_test_run(void)
     previous_right_count = encoder_manager_read(&robot_encoder_manager,
         MOTOR_SPEED_PID_RIGHT_ENCODER_INDEX);
     last_control_ms = get_ms();
+    target_profile_start_ms = last_control_ms;
 
     for (;;) {
         uint32_t now_ms = get_ms();
         uint32_t dt_ms = now_ms - last_control_ms;
+        float target_rpm = motor_speed_pid_get_target(
+            now_ms - target_profile_start_ms);
         int32_t current_left_count;
         int32_t current_right_count;
         int32_t left_delta;
@@ -220,11 +265,11 @@ void motor_speed_pid_test_run(void)
         right_rpm = motor_speed_pid_filter(&right_pid, right_raw_rpm);
 
         motor_pwms[0] = motor_speed_pid_calculate(&left_pid,
-            MOTOR_SPEED_PID_TARGET_RPM, left_rpm, (float) dt_ms / 1000.0f,
+            target_rpm, left_rpm, (float) dt_ms / 1000.0f,
             MOTOR_SPEED_PID_LEFT_KP, MOTOR_SPEED_PID_LEFT_KI,
             MOTOR_SPEED_PID_LEFT_KD, &left_error);
         motor_pwms[1] = motor_speed_pid_calculate(&right_pid,
-            MOTOR_SPEED_PID_TARGET_RPM, right_rpm, (float) dt_ms / 1000.0f,
+            target_rpm, right_rpm, (float) dt_ms / 1000.0f,
             MOTOR_SPEED_PID_RIGHT_KP, MOTOR_SPEED_PID_RIGHT_KI,
             MOTOR_SPEED_PID_RIGHT_KD, &right_error);
         motor_set_pwms(motor_pwms);
@@ -251,7 +296,7 @@ void motor_speed_pid_test_run(void)
             motor_speed_pid_fault("ENCODER NO PULSE", -2);
         }
 
-        led_set_color(COLOR_GREEN);
+        board_led_set(true);
         display_counter++;
         if (display_counter >= MOTOR_SPEED_PID_DISPLAY_PERIOD_CYCLES) {
             display_counter = 0U;
@@ -259,8 +304,8 @@ void motor_speed_pid_test_run(void)
                 "L:", left_rpm);
             motor_speed_pid_format_rpm(right_text, sizeof(right_text),
                 "R:", right_rpm);
-            (void) snprintf(pwm_text, sizeof(pwm_text), "PWM:%d,%d",
-                motor_pwms[0], motor_pwms[1]);
+            (void) snprintf(pwm_text, sizeof(pwm_text), "T:%d P:%d,%d",
+                (int) target_rpm, motor_pwms[0], motor_pwms[1]);
             motor_speed_pid_display(left_text, right_text, pwm_text);
         }
 
@@ -270,7 +315,7 @@ void motor_speed_pid_test_run(void)
             /* VOFA+ FireWater: 13 numeric channels, no text/header. */
             usart_printf(DEBUG_UART_INST,
                 "%d,%d,%d,%d,%d,%d,%d,%ld,%ld,%ld,%ld,%lu,0\n",
-                motor_speed_pid_tenths(MOTOR_SPEED_PID_TARGET_RPM),
+                motor_speed_pid_tenths(target_rpm),
                 motor_speed_pid_tenths(left_rpm),
                 motor_speed_pid_tenths(right_rpm), motor_pwms[0],
                 motor_pwms[1], motor_speed_pid_tenths(left_error),

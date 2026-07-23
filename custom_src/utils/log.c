@@ -23,7 +23,7 @@ static void log_print(int level, const char *format, va_list args) {
                 break;
         }
         vsnprintf(buffer, sizeof(buffer), format, args);
-        usart_printf(UART_0_INST, "%s %s\r\n", level_tag, buffer);
+        usart_printf(DEBUG_UART_INST, "%s %s\r\n", level_tag, buffer);
     }
 }
 

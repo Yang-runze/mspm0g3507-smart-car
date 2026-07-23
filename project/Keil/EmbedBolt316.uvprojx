@@ -72,7 +72,7 @@
           <BeforeMake>
             <RunUserProg1>1</RunUserProg1>
             <RunUserProg2>0</RunUserProg2>
-            <UserProg1Name>cmd.exe /C "E:\TI2026\mspm0_sdk_2_10_00_04\tools\keil\syscfg.bat 'E:\TI2026\mspm0_sdk_2_10_00_04\mspm0g3507\project\config\' EmbedBolt316.syscfg"</UserProg1Name>
+            <UserProg1Name>cmd.exe /C "E:\TI2026\mspm0_sdk_2_10_00_04\tools\keil\syscfg.bat 'E:\TI2026\mspm0_sdk_2_10_00_04\titmx\project\config\' EmbedBolt316.syscfg"</UserProg1Name>
             <UserProg2Name></UserProg2Name>
             <UserProg1Dos16Mode>0</UserProg1Dos16Mode>
             <UserProg2Dos16Mode>0</UserProg2Dos16Mode>
@@ -902,9 +902,14 @@
               <FilePath>..\..\custom_src\drivers\actuators\motor\motor_user.c</FilePath>
             </File>
             <File>
-              <FileName>rgb_led.c</FileName>
+              <FileName>board_led.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\custom_src\drivers\actuators\voice_light_alert\rgb_led.c</FilePath>
+              <FilePath>..\..\custom_src\drivers\actuators\voice_light_alert\board_led.c</FilePath>
+            </File>
+            <File>
+              <FileName>beep.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\custom_src\drivers\actuators\voice_light_alert\beep.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -984,6 +989,11 @@
               <FileName>maix_cam.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\custom_src\drivers\communication\maix_cam.c</FilePath>
+            </File>
+            <File>
+              <FileName>gimbal_uart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\custom_src\drivers\communication\gimbal_uart.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -1293,6 +1303,18 @@
               </Aads>
             </GroupArmAds>
           </GroupOption>
+          <Files>
+            <File>
+              <FileName>multi_button.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\custom_src\middleware\ui\button\multi_button.c</FilePath>
+            </File>
+            <File>
+              <FileName>ui_button.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\custom_src\middleware\ui\button\ui_button.c</FilePath>
+            </File>
+          </Files>
         </Group>
         <Group>
           <GroupName>Middleware/Fusion</GroupName>
@@ -1514,6 +1536,11 @@
               <FileName>delay.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\custom_src\utils\delay.c</FilePath>
+            </File>
+            <File>
+              <FileName>log.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\custom_src\utils\log.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -1819,6 +1846,16 @@
               <FilePath>..\..\tests\unit_tests\gray_pid_tracking_test.h</FilePath>
             </File>
             <File>
+              <FileName>h24_figure_eight.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\tests\unit_tests\h24_figure_eight.c</FilePath>
+            </File>
+            <File>
+              <FileName>h24_figure_eight.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\tests\unit_tests\h24_figure_eight.h</FilePath>
+            </File>
+            <File>
               <FileName>gyro_pid_control_test.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\tests\unit_tests\gyro_pid_control_test.c</FilePath>
@@ -1842,6 +1879,11 @@
               <FileName>PID_TEST_TUNING_GUIDE.md</FileName>
               <FileType>5</FileType>
               <FilePath>..\..\tests\unit_tests\PID_TEST_TUNING_GUIDE.md</FilePath>
+            </File>
+            <File>
+              <FileName>PIN_APPLICATION_AUDIT.md</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\tests\unit_tests\PIN_APPLICATION_AUDIT.md</FilePath>
             </File>
           </Files>
         </Group>

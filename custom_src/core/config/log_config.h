@@ -1,7 +1,8 @@
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef LOG_CONFIG_H
+#define LOG_CONFIG_H
 
-#define MODULE_LOG_ENABLED 1
+/* Keep PID FireWater telemetry numeric-only; enable temporarily for diagnosis. */
+#define MODULE_LOG_ENABLED 0
 
 //  LOG_LEVEL_ERROR = 1
 //  LOG_LEVEL_WARN = 2
@@ -11,4 +12,4 @@
 
 #define MODULE_LOG_LEVEL 4  
 
-#endif // CONFIG_H
+#endif // LOG_CONFIG_H

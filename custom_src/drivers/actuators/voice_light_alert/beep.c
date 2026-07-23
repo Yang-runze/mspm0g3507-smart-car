@@ -1,27 +1,12 @@
 #include "beep.h"
 #include "ti_msp_dl_config.h"
 #include "delay.h"
-#include <math.h>
 
-#define LFCLK_FREQ 32768
 #define BASE_TEMPO 125  // 基准节拍时间(ms)
 
 // 全局变量
 static uint8_t current_volume = BEEP_VOLUME_MAX;
 static music_player_t g_music_player = {0};
-
-static void beep_select_pwm_output(void)
-{
-    DL_GPIO_initPeripheralOutputFunction(GPIO_BEEP_PWM_C1_IOMUX,
-        GPIO_BEEP_PWM_C1_IOMUX_FUNC);
-}
-
-static void beep_force_output_low(void)
-{
-    DL_GPIO_initDigitalOutput(GPIO_BEEP_PWM_C1_IOMUX);
-    DL_GPIO_clearPins(GPIO_BEEP_PWM_C1_PORT, GPIO_BEEP_PWM_C1_PIN);
-    DL_GPIO_enableOutput(GPIO_BEEP_PWM_C1_PORT, GPIO_BEEP_PWM_C1_PIN);
-}
 
 // 频率表
 static const uint16_t MusicalNote[] = {
@@ -67,24 +52,6 @@ static const uint16_t MusicalNote[] = {
     988   // B5  - H7
 };
 
-void BEEP_PWM_setPeriod(uint32_t newPeriod) {
-    newPeriod = fmin(LFCLK_FREQ, fmax(1, newPeriod));
-    
-    DL_TimerG_stopCounter(BEEP_PWM_INST);
-    DL_TimerG_setLoadValue(BEEP_PWM_INST, newPeriod);
-    
-    uint32_t duty_cycle;
-    if (current_volume == 0) {
-        duty_cycle = 0;
-    } else {
-        duty_cycle = (newPeriod * current_volume) / 100;
-    }
-    
-    DL_TimerG_setCaptureCompareValue(BEEP_PWM_INST, duty_cycle, DL_TIMER_CC_1_INDEX);
-    beep_select_pwm_output();
-    DL_TimerG_startCounter(BEEP_PWM_INST);
-}
-
 void beep_init(void) {
     beep_off();
     music_player_init();
@@ -95,23 +62,26 @@ void beep_control(bool state) {
 }
 
 void beep_on(void) {
-    beep_select_pwm_output();
-    DL_TimerG_startCounter(BEEP_PWM_INST);
+    if (current_volume != BEEP_VOLUME_MUTE) {
+        DL_GPIO_setPins(PORTB_PORT, PORTB_BUZZER_PIN);
+    }
 }
 
 void beep_off(void) {
-    DL_TimerG_stopCounter(BEEP_PWM_INST);
-    beep_force_output_low();
+    DL_GPIO_clearPins(PORTB_PORT, PORTB_BUZZER_PIN);
 }
 
 void beep_set_volume(beep_volume_level_t volume) {
     current_volume = volume;
+    if (volume == BEEP_VOLUME_MUTE) {
+        beep_off();
+    }
 }
 
 static void play_sound(uint16_t frq) {
-    if(frq != 0) {
-        uint32_t period = LFCLK_FREQ / frq;
-        BEEP_PWM_setPeriod(period);
+    /* PB3 is an enable signal for an active buzzer, not a timer output. */
+    if (frq != 0U) {
+        beep_on();
     } else {
         beep_off();
     }

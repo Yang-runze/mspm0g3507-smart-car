@@ -92,7 +92,7 @@ void lengke_gyro_init(void)
 
 void lengke_gyro_uart_irq_handler(void)
 {
-    /* Same interrupt flow as the manufacturer's UART_0_INST_IRQHandler(). */
+    /* UART1 RX interrupt: gyro TX is connected to PA9. */
     switch (DL_UART_Main_getPendingInterrupt(LENGKE_GYRO_UART)) {
         case DL_UART_MAIN_IIDX_RX:
             CopeSerial2Data(

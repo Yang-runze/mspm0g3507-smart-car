@@ -28,10 +28,12 @@ typedef struct {
     bool enabled;
     GPTIMER_Regs *timer_instance;
 
-    /* Dual-PWM H-bridge interface (DRV8870 IN1/IN2). */
+    /* TB6612: one PWM input plus two GPIO direction inputs per motor. */
     uint32_t pwm_cc_index;
-    GPTIMER_Regs *second_timer_instance;
-    uint32_t second_pwm_cc_index;
+    GPIO_Regs *in1_port;
+    uint32_t in1_pin;
+    GPIO_Regs *in2_port;
+    uint32_t in2_pin;
     bool polarity;
 
 		// L298N INTERFACE

@@ -1,7 +1,6 @@
 #include "voice_light_alert.h"
 #include "systick.h"
 
-static Color current_color = COLOR_GREEN;
 static uint8_t alert_count = 0;
 static uint8_t alert_enable = 0;
 static uint16_t alert_time = 300;
@@ -9,19 +8,15 @@ static uint32_t last_tick_time = 0;
 static uint8_t current_state = 0;
 static uint8_t completed_cycles = 0;
 
-void play_alert_blocking(uint8_t count, Color c) {
+void play_alert_blocking(uint8_t count) {
 	for (int i = 0; i < count; i++) {
-		led_set_color(c);
+		board_led_set(true);
 		beep_on();
 		delay_ms(200);
 		beep_off();
-		led_set_color(COLOR_OFF);
+		board_led_set(false);
 		delay_ms(200);
 	}
-}
-
-void set_alert_color(Color c) {
-	current_color = c;
 }
 
 void set_alert_count(uint8_t count) {
@@ -46,7 +41,7 @@ void stop_alert(void) {
     alert_enable = 0;
     completed_cycles = 0; // 清零已完成循环次数
     // 确保最后是关闭状态
-    led_set_color(COLOR_OFF);
+    board_led_set(false);
     beep_off();
     current_state = 0; // 重置状态
 }
@@ -61,11 +56,11 @@ void alert_ticks(void) {
 		last_tick_time = current_tick_time; // 更新上次时间
 		
 		if (current_state == 0) { // 当前是关状态，切换到开
-			led_set_color(current_color);
+			board_led_set(true);
 			beep_on();
 			current_state = 1;
 		} else { // 当前是开状态，切换到关
-			led_set_color(COLOR_OFF);
+			board_led_set(false);
 			beep_off();
 			current_state = 0;
 			// 只有当从开到关切换时，才计算完成了一个循环
