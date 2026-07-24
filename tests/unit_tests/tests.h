@@ -1,10 +1,7 @@
 #ifndef TESTS_H
 #define TESTS_H
 
-/*
- * Set MODULE_TEST_SELECTED to one item below, rebuild, and then flash.
- * Only the selected test is started.
- */
+/* Runtime OLED menu item IDs. K3 moves down and K4 starts an item. */
 #define MODULE_TEST_OLED 1U
 #define MODULE_TEST_BOARD_LED 2U
 #define MODULE_TEST_BUZZER 3U
@@ -21,10 +18,6 @@
 #define MODULE_TEST_DEBUG_UART 14U
 #define MODULE_TEST_GIMBAL_UART 15U
 #define MODULE_TEST_H24_FIGURE_EIGHT 16U
-
-#ifndef MODULE_TEST_SELECTED
-#define MODULE_TEST_SELECTED MODULE_TEST_H24_FIGURE_EIGHT
-#endif
 
 void module_test_run(void);
 

@@ -1,5 +1,8 @@
 #include "tests.h"
 
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "beep.h"
@@ -515,41 +518,184 @@ static void test_oled_i2c(void)
     }
 }
 
+typedef struct {
+    uint8_t id;
+    const char *name;
+    bool drives_motor;
+} module_test_menu_item_t;
+
+static const module_test_menu_item_t module_test_menu_items[] = {
+    {MODULE_TEST_OLED, "OLED", false},
+    {MODULE_TEST_BOARD_LED, "BOARD LED", false},
+    {MODULE_TEST_BUZZER, "BUZZER", false},
+    {MODULE_TEST_MOTOR, "MOTOR", true},
+    {MODULE_TEST_ENCODER, "ENCODER", true},
+    {MODULE_TEST_BUTTONS, "BUTTONS", false},
+    {MODULE_TEST_GRAY_SENSOR, "GRAY SENSOR", false},
+    {MODULE_TEST_GYRO, "GYRO SENSOR", false},
+    {MODULE_TEST_CAMERA_UART, "CAMERA UART", false},
+    {MODULE_TEST_OLED_I2C, "OLED I2C", false},
+    {MODULE_TEST_GRAY_PID_TRACKING, "GRAY PID", true},
+    {MODULE_TEST_GYRO_PID_CONTROL, "GYRO PID", true},
+    {MODULE_TEST_MOTOR_SPEED_PID, "MOTOR SPEED PID", true},
+    {MODULE_TEST_DEBUG_UART, "DEBUG UART", false},
+    {MODULE_TEST_GIMBAL_UART, "GIMBAL UART", false},
+    {MODULE_TEST_H24_FIGURE_EIGHT, "H24 FIGURE EIGHT", true},
+};
+
+#define MODULE_TEST_MENU_ITEM_COUNT \
+    (sizeof(module_test_menu_items) / sizeof(module_test_menu_items[0]))
+#define MODULE_TEST_MENU_VISIBLE_ROWS 3U
+#define MODULE_TEST_SAFETY_COUNTDOWN_SECONDS 2U
+
+static void module_test_draw_menu(size_t selected_index)
+{
+    char rows[MODULE_TEST_MENU_VISIBLE_ROWS][22];
+    size_t page_start =
+        (selected_index / MODULE_TEST_MENU_VISIBLE_ROWS) *
+        MODULE_TEST_MENU_VISIBLE_ROWS;
+
+    for (size_t row = 0U; row < MODULE_TEST_MENU_VISIBLE_ROWS; row++) {
+        size_t item_index = page_start + row;
+
+        if (item_index < MODULE_TEST_MENU_ITEM_COUNT) {
+            (void) snprintf(rows[row], sizeof(rows[row]), "%c%s",
+                item_index == selected_index ? '>' : ' ',
+                module_test_menu_items[item_index].name);
+        } else {
+            rows[row][0] = '\0';
+        }
+    }
+
+    test_display("TEST MENU", rows[0], rows[1], rows[2]);
+}
+
+static size_t module_test_select_from_menu(void)
+{
+    size_t selected_index = 0U;
+    bool previous_k3 = false;
+    bool previous_k4 = false;
+
+    module_test_draw_menu(selected_index);
+
+    for (;;) {
+        bool k3 = user_button_is_pressed(BUTTON_DOWN);
+        bool k4 = user_button_is_pressed(BUTTON_UP);
+
+        if (k3 && !previous_k3) {
+            selected_index++;
+            if (selected_index >= MODULE_TEST_MENU_ITEM_COUNT) {
+                selected_index = 0U;
+            }
+            module_test_draw_menu(selected_index);
+        }
+
+        if (k4 && !previous_k4) {
+            /*
+             * Do not pass a still-held confirmation key into BUTTONS or the
+             * H24 sub-menu. Wait until both menu keys have been released.
+             */
+            while (user_button_is_pressed(BUTTON_DOWN) ||
+                   user_button_is_pressed(BUTTON_UP)) {
+                delay_ms(20U);
+            }
+            return selected_index;
+        }
+
+        previous_k3 = k3;
+        previous_k4 = k4;
+        delay_ms(20U);
+    }
+}
+
+static void module_test_motor_safety_countdown(
+    const module_test_menu_item_t *item)
+{
+    char countdown_text[22];
+
+    for (uint32_t seconds = MODULE_TEST_SAFETY_COUNTDOWN_SECONDS;
+         seconds > 0U; seconds--) {
+        (void) snprintf(countdown_text, sizeof(countdown_text),
+            "START IN %lu s", (unsigned long) seconds);
+        test_display("MOTOR SAFETY", item->name,
+            "LIFT/CLEAR CAR", countdown_text);
+        delay_ms(1000U);
+    }
+}
+
+static void module_test_dispatch(uint8_t selected_test)
+{
+    switch (selected_test) {
+        case MODULE_TEST_OLED:
+            test_oled();
+            break;
+        case MODULE_TEST_BOARD_LED:
+            test_board_led();
+            break;
+        case MODULE_TEST_BUZZER:
+            test_buzzer();
+            break;
+        case MODULE_TEST_MOTOR:
+            test_motor();
+            break;
+        case MODULE_TEST_ENCODER:
+            test_encoder();
+            break;
+        case MODULE_TEST_BUTTONS:
+            test_buttons();
+            break;
+        case MODULE_TEST_GRAY_SENSOR:
+            test_gray_sensor();
+            break;
+        case MODULE_TEST_GYRO:
+            test_gyro();
+            break;
+        case MODULE_TEST_CAMERA_UART:
+            test_camera_uart();
+            break;
+        case MODULE_TEST_OLED_I2C:
+            test_oled_i2c();
+            break;
+        case MODULE_TEST_GRAY_PID_TRACKING:
+            gray_pid_tracking_test_run();
+            break;
+        case MODULE_TEST_GYRO_PID_CONTROL:
+            gyro_pid_control_test_run();
+            break;
+        case MODULE_TEST_MOTOR_SPEED_PID:
+            motor_speed_pid_test_run();
+            break;
+        case MODULE_TEST_DEBUG_UART:
+            test_debug_uart();
+            break;
+        case MODULE_TEST_GIMBAL_UART:
+            test_gimbal_uart();
+            break;
+        case MODULE_TEST_H24_FIGURE_EIGHT:
+            h24_figure_eight_run();
+            break;
+        default:
+            test_display("TEST MENU ERROR", "INVALID TEST ID",
+                "RESET REQUIRED", "");
+            for (;;) {
+                delay_ms(100U);
+            }
+    }
+}
+
 void module_test_run(void)
 {
-#if MODULE_TEST_SELECTED == MODULE_TEST_OLED
-    test_oled();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_BOARD_LED
-    test_board_led();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_BUZZER
-    test_buzzer();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_MOTOR
-    test_motor();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_ENCODER
-    test_encoder();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_BUTTONS
-    test_buttons();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_GRAY_SENSOR
-    test_gray_sensor();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_GYRO
-    test_gyro();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_CAMERA_UART
-    test_camera_uart();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_OLED_I2C
-    test_oled_i2c();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_GRAY_PID_TRACKING
-    gray_pid_tracking_test_run();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_GYRO_PID_CONTROL
-    gyro_pid_control_test_run();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_MOTOR_SPEED_PID
-    motor_speed_pid_test_run();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_DEBUG_UART
-    test_debug_uart();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_GIMBAL_UART
-    test_gimbal_uart();
-#elif MODULE_TEST_SELECTED == MODULE_TEST_H24_FIGURE_EIGHT
-    h24_figure_eight_run();
-#else
-#error "MODULE_TEST_SELECTED is not a valid module test ID"
-#endif
+    size_t selected_index;
+    const module_test_menu_item_t *selected_item;
+
+    u8g2_Init();
+    board_led_set(false);
+    selected_index = module_test_select_from_menu();
+    selected_item = &module_test_menu_items[selected_index];
+
+    if (selected_item->drives_motor) {
+        module_test_motor_safety_countdown(selected_item);
+    }
+
+    module_test_dispatch(selected_item->id);
 }

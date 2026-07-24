@@ -28,6 +28,8 @@ project/Keil/*.uvguix.*
 
 # JLink
 *.jlink
+project/Keil/JLinkLog.txt
+project/Keil/JLinkSettings.ini
 
 # TI SysConfig 备份
 *.syscfg.bak

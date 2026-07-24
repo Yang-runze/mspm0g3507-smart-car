@@ -8,7 +8,7 @@
 | 陀螺仪航向串级 PID | `gyro_pid_control_test.c` | `gyro_pid_control_test.h` | 12 |
 | 双电机速度闭环 PID | `motor_speed_pid_test.c` | `motor_speed_pid_test.h` | 13 |
 
-三套程序不会同时控制电机。每次只能在 `tests.h` 中选择一项，重新编译并烧录。
+三套程序不会同时控制电机。烧录一次后，可直接在 OLED 菜单中选择其中一项运行。
 
 ## 一、开始前必须做的准备
 
@@ -58,27 +58,11 @@
 
 ### 3. 选择测试程序
 
-打开 `tests/unit_tests/tests.h`，修改：
+复位后 OLED 显示 `TEST MENU`。短按 K3 向下移动，找到 `GRAY PID`、`GYRO PID` 或 `MOTOR SPEED PID`，再短按 K4 确认。
 
-```c
-#define MODULE_TEST_SELECTED MODULE_TEST_GRAY_PID_TRACKING
-```
+这三项都会先经过菜单统一的 2 秒电机安全倒计时，然后进入各自原有的初始化和倒计时流程。结束测试时按开发板复位键，即可回到菜单并选择另一项，无需修改宏、重新编译或重新烧录。
 
-或者：
-
-```c
-#define MODULE_TEST_SELECTED MODULE_TEST_GYRO_PID_CONTROL
-```
-
-或者：
-
-```c
-#define MODULE_TEST_SELECTED MODULE_TEST_MOTOR_SPEED_PID
-```
-
-目前工程默认选择 `MODULE_TEST_MOTOR_SPEED_PID`。编码器每圈计数已经校准完成，速度测试会循环执行 `100 -> 50 -> 120 RPM` 阶跃。
-
-修改后执行 Rebuild，再烧录。若 Keil 的 Go To Definition 显示 `no browse info`，关闭并重新打开工程，让 Keil 重新加载新增文件，然后 Rebuild；工程已开启 Browse Information。
+编码器每圈计数已经校准完成，速度测试会循环执行 `100 -> 50 -> 120 RPM` 阶跃。只有修改 PID 参数或程序代码后才需要在 Keil 中 Rebuild 并重新烧录。
 
 ## 二、调试串口接线与读取方法
 
